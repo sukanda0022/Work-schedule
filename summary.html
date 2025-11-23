@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>สรุปงานวันนี้</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ตัวอย่างสไตล์เล็กน้อย */
+    .done {
+      color: green;
+      font-weight: bold;
+    }
+    .notdone {
+      color: #ccc;
+    }
+    table.summary-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    table.summary-table th, table.summary-table td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    table.summary-table th {
+      background-color: #444;
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>สรุปงานวันนี้</h1>
+
+    <button onclick="goBack()" class="btn">◀ กลับหน้าหลัก</button>
+
+    <label for="summaryDate">เลือกวันที่</label>
+    <input type="date" id="summaryDate" class="input" />
+
+    <div id="summaryContainer" class="card"></div>
+  </div>
+
+  <!-- Firebase compat SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    // Firebase config (เหมือนใน index.html)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDfUd3RdyccN4_u0R6bNbYtejHFYUNPxkM",
+      authDomain: "shop2-eba1e.firebaseapp.com",
+      projectId: "shop2-eba1e",
+      storageBucket: "shop2-eba1e.appspot.com",
+      messagingSenderId: "1016144050614",
+      appId: "1:1016144050614:web:0f898db4bb56084121a917",
+      measurementId: "G-RHD6SC5NF0"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const allTasks = [
+      "ตึกเฮงๆ",
+      "ข้างเฮงๆ",
+      "ตึกซัก",
+      "บ้าน 21",
+      "บ้าน 49",
+      "บ้าน 259",
+      "เก็บขอบบัว+เช็ดประตู",
+      "ร้านเฮงๆ+พื้นที่ข้างหน้า",
+      "ห้องเก็บของ(ข้างเฮงๆ)+เครื่องซักผ้าข้างหน้า",
+      "ห้องซัก",
+      "รดน้ำต้นไม้"
+    ];
+
+    const dateInput = document.getElementById("summaryDate");
+    const summaryBox = document.getElementById("summaryContainer");
+
+    // กำหนดค่า input วันที่วันนี้เป็นค่าเริ่มต้น
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    dateInput.value = `${year}-${month}-${day}`;
+
+    const employees = ["ดา", "บีม", "เมย์"];
+
+    // ฟังก์ชันแปลงวันที่เป็นแบบ "23 พ.ย. 2568"
+    function formatThaiDate(dateString) {
+      const months = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+        "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+      const d = new Date(dateString);
+      const day = d.getDate();
+      const month = months[d.getMonth()];
+      const year = d.getFullYear() + 543;
+      return `${day} ${month} ${year}`;
+    }
+
+    // ฟังก์ชันแสดงตารางโดยรับข้อมูลมาจาก Firebase
+    function renderSummary(day, data) {
+      const dayData = data || {};
+
+      let html = `<h2>สรุปงานวันที่ ${formatThaiDate(day)}</h2>`;
+      html += `<table class="summary-table"><thead><tr><th>งาน</th>`;
+
+      employees.forEach(emp => {
+        html += `<th>${emp}</th>`;
+      });
+      html += `</tr></thead><tbody>`;
+
+      allTasks.forEach(task => {
+        html += `<tr><td class="text-start">${task}</td>`;
+
+        employees.forEach(emp => {
+          const empTasks = dayData[emp] || [];
+          const didTask = empTasks.includes(task);
+          html += `<td><span class="${didTask ? 'done' : 'notdone'}">${didTask ? 'ทำแล้ว' : ''}</span></td>`;
+        });
+
+        html += `</tr>`;
+      });
+
+      html += `</tbody></table>`;
+
+      summaryBox.innerHTML = html;
+    }
+
+    // ฟังก์ชันตั้ง listener แบบเรียลไทม์จาก Firestore
+    function listenToData(day) {
+      return db.collection('workData').doc(day)
+        .onSnapshot(doc => {
+          if (doc.exists) {
+            renderSummary(day, doc.data());
+          } else {
+            renderSummary(day, {}); // กรณีไม่มีข้อมูล
+          }
+        });
+    }
+
+    // ตัวแปรเก็บ unsubscribe function เพื่อยกเลิก listener เมื่อต้องการ
+    let unsubscribe = null;
+
+    // เริ่มต้นตอนโหลดหน้าเว็บ
+    document.addEventListener("DOMContentLoaded", () => {
+      unsubscribe = listenToData(dateInput.value);
+    });
+
+    // ฟัง event เปลี่ยนวันที่ แล้วยกเลิก listener เก่า แล้วเปิด listener ใหม่
+    dateInput.addEventListener("change", () => {
+      if (unsubscribe) unsubscribe();
+      unsubscribe = listenToData(dateInput.value);
+    });
+
+    function goBack() {
+      window.location.href = "index.html";
+    }
+  </script>
+</body>
+
+</html>
